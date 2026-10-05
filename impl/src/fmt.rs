@@ -111,6 +111,28 @@ impl Display<'_> {
             let field = match member_index.get(&member) {
                 Some(&field) => field,
                 None => {
+                    // A reference to `self` is not a field; leave it for the
+                    // format machinery to interpolate, e.g. `{self:?}`.
+                    if member != *"self" {
+                        match &member {
+                            MemberUnraw::Named(ident) => {
+                                let msg = format!("no field named `{ident}` in this {container}");
+                                return Err(Error::new(span, msg));
+                            }
+                            MemberUnraw::Unnamed(index) if !extra_positional_arguments_allowed => {
+                                let msg = format!(
+                                    "tuple index {} is out of range; this {container} has {} {}",
+                                    index.index,
+                                    fields.len(),
+                                    if fields.len() == 1 { "field" } else { "fields" },
+                                );
+                                return Err(Error::new(span, msg));
+                            }
+                            // Positional reference to one of the extra
+                            // arguments passed after the format string.
+                            MemberUnraw::Unnamed(_) => {}
+                        }
+                    }
                     out += &member.to_string();
                     continue;
                 }

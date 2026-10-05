@@ -1,0 +1,29 @@
+error: no field named `misspelled` in this struct
+ --> tests/ui/unknown-format-field.rs:4:9
+  |
+4 | #[error("missing field: {misspelled}")]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: tuple index 1 is out of range; this tuple struct has 1 field
+  --> tests/ui/unknown-format-field.rs:10:9
+   |
+10 | #[error("tuple index out of range: {1}")]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: no field named `misspelled` in this struct variant
+  --> tests/ui/unknown-format-field.rs:15:13
+   |
+15 |     #[error("missing field: {misspelled}")]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: tuple index 2 is out of range; this tuple variant has 2 fields
+  --> tests/ui/unknown-format-field.rs:17:13
+   |
+17 |     #[error("tuple index out of range: {2}")]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: no field named `misspelled` in this unit variant
+  --> tests/ui/unknown-format-field.rs:19:13
+   |
+19 |     #[error("missing field: {misspelled}")]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

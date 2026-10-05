@@ -74,7 +74,7 @@ fn test_enum() {
 #[test]
 fn test_constants() {
     #[derive(Error, Debug)]
-    #[error("{MSG}: {id:?} (code {CODE:?})")]
+    #[error("{MSG}: {id:?} (code {CODE:?})", MSG = MSG, CODE = CODE)]
     struct Error {
         id: &'static str,
     }

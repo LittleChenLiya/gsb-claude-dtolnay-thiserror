@@ -86,6 +86,7 @@ impl<'a> Enum<'a> {
     fn from_syn(node: &'a DeriveInput, data: &'a DataEnum) -> Result<Self> {
         let attrs = attr::get(&node.attrs)?;
         let scope = ParamsInScope::new(&node.generics);
+        let mut errors: Option<Error> = None;
         let variants = data
             .variants
             .iter()
@@ -101,11 +102,22 @@ impl<'a> Enum<'a> {
                 }
                 if let Some(display) = &mut variant.attrs.display {
                     let container = ContainerKind::from_variant(node);
-                    display.expand_shorthand(&variant.fields, container)?;
+                    // Diagnose every variant's format arguments, not just the
+                    // first failing one; each variant has its own argument
+                    // domain.
+                    if let Err(error) = display.expand_shorthand(&variant.fields, container) {
+                        match &mut errors {
+                            Some(errors) => errors.combine(error),
+                            None => errors = Some(error),
+                        }
+                    }
                 }
                 Ok(variant)
             })
-            .collect::<Result<_>>()?;
+            .collect::<Result<Vec<_>>>()?;
+        if let Some(errors) = errors {
+            return Err(errors);
+        }
         Ok(Enum {
             attrs,
             ident: node.ident.clone(),
