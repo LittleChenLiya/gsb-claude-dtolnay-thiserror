@@ -3,3 +3,9 @@ error: transparent variant can't contain #[source]
   |
 6 |     Other(#[source] anyhow::Error),
   |           ^^^^^^^^^
+
+error: #[error(transparent)] attribute is here
+ --> tests/ui/transparent-enum-source.rs:5:5
+  |
+5 |     #[error(transparent)]
+  |     ^^^^^^^^^^^^^^^^^^^^^

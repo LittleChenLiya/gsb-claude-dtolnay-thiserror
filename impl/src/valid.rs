@@ -1,6 +1,6 @@
 use crate::ast::{Enum, Field, Input, Struct, Variant};
 use crate::attr::Attrs;
-use syn::{Error, GenericArgument, PathArguments, Result, Type};
+use syn::{Attribute, Error, GenericArgument, PathArguments, Result, Type};
 
 impl Input<'_> {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -21,12 +21,11 @@ impl Struct<'_> {
                     "#[error(transparent)] requires exactly one field",
                 ));
             }
-            if let Some(source) = self.fields.iter().find_map(|f| f.attrs.source) {
-                return Err(Error::new_spanned(
-                    source.original,
-                    "transparent error struct can't contain #[source]",
-                ));
-            }
+            check_transparent_fields(
+                transparent.original,
+                &self.fields,
+                "transparent error struct",
+            )?;
         }
         if let Some(fmt) = &self.attrs.fmt {
             return Err(Error::new_spanned(
@@ -73,12 +72,11 @@ impl Variant<'_> {
                     "#[error(transparent)] requires exactly one field",
                 ));
             }
-            if let Some(source) = self.fields.iter().find_map(|f| f.attrs.source) {
-                return Err(Error::new_spanned(
-                    source.original,
-                    "transparent variant can't contain #[source]",
-                ));
-            }
+            check_transparent_fields(
+                self.attrs.transparent.unwrap().original,
+                &self.fields,
+                "transparent variant",
+            )?;
         }
         check_field_attrs(&self.fields)?;
         for field in &self.fields {
@@ -149,34 +147,37 @@ fn check_non_field_attrs(attrs: &Attrs) -> Result<()> {
 }
 
 fn check_field_attrs(fields: &[Field]) -> Result<()> {
-    let mut from_field = None;
-    let mut source_field = None;
-    let mut backtrace_field = None;
+    let mut from_field: Option<&Field> = None;
+    let mut source_field: Option<&Field> = None;
+    let mut backtrace_field: Option<&Field> = None;
     let mut has_backtrace = false;
     for field in fields {
         if let Some(from) = field.attrs.from {
-            if from_field.is_some() {
-                return Err(Error::new_spanned(
+            if let Some(first) = from_field {
+                return Err(conflicting_attrs(
+                    first.attrs.from.unwrap().original,
                     from.original,
-                    "duplicate #[from] attribute",
+                    "#[from]",
                 ));
             }
             from_field = Some(field);
         }
         if let Some(source) = field.attrs.source {
-            if source_field.is_some() {
-                return Err(Error::new_spanned(
+            if let Some(first) = source_field {
+                return Err(conflicting_attrs(
+                    first.attrs.source.unwrap().original,
                     source.original,
-                    "duplicate #[source] attribute",
+                    "#[source]",
                 ));
             }
             source_field = Some(field);
         }
         if let Some(backtrace) = field.attrs.backtrace {
-            if backtrace_field.is_some() {
-                return Err(Error::new_spanned(
+            if let Some(first) = backtrace_field {
+                return Err(conflicting_attrs(
+                    first.attrs.backtrace.unwrap(),
                     backtrace,
-                    "duplicate #[backtrace] attribute",
+                    "#[backtrace]",
                 ));
             }
             backtrace_field = Some(field);
@@ -192,10 +193,15 @@ fn check_field_attrs(fields: &[Field]) -> Result<()> {
     }
     if let (Some(from_field), Some(source_field)) = (from_field, source_field) {
         if from_field.member != source_field.member {
-            return Err(Error::new_spanned(
+            let mut error = Error::new_spanned(
                 from_field.attrs.from.unwrap().original,
                 "#[from] is only supported on the source field, not any other field",
+            );
+            error.combine(Error::new_spanned(
+                source_field.attrs.source.unwrap().original,
+                "the source field is declared here",
             ));
+            return Err(error);
         }
     }
     if let Some(from_field) = from_field {
@@ -219,6 +225,48 @@ fn check_field_attrs(fields: &[Field]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+// A transparent error delegates its source, Display and backtrace to its one
+// inner field, so an explicit #[source] or #[backtrace] attribute on that
+// field would make the forwarding ambiguous. Reject the combination and
+// point at every conflicting attribute: the field-level attribute and the
+// #[error(transparent)] that it conflicts with. The spans are taken from the
+// attributes themselves, so a conflict inside one enum variant never points
+// into a different variant.
+fn check_transparent_fields(transparent: &Attribute, fields: &[Field], kind: &str) -> Result<()> {
+    for field in fields {
+        if let Some(source) = field.attrs.source {
+            let mut error =
+                Error::new_spanned(source.original, format!("{} can't contain #[source]", kind));
+            error.combine(Error::new_spanned(
+                transparent,
+                "#[error(transparent)] attribute is here",
+            ));
+            return Err(error);
+        }
+        if let Some(backtrace) = field.attrs.backtrace {
+            let mut error =
+                Error::new_spanned(backtrace, format!("{} can't contain #[backtrace]", kind));
+            error.combine(Error::new_spanned(
+                transparent,
+                "#[error(transparent)] attribute is here",
+            ));
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+// Two attributes that cannot coexist on different fields of the same struct
+// or variant. Report every conflicting span, not just one of them.
+fn conflicting_attrs(first: &Attribute, second: &Attribute, attr: &str) -> Error {
+    let mut error = Error::new_spanned(second, format!("duplicate {} attribute", attr));
+    error.combine(Error::new_spanned(
+        first,
+        format!("first {} attribute is here", attr),
+    ));
+    error
 }
 
 fn contains_non_static_lifetime(ty: &Type) -> bool {

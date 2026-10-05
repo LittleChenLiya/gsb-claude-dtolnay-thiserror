@@ -3,3 +3,9 @@ error: #[from] is only supported on the source field, not any other field
   |
 7 |     #[from]
   |     ^^^^^^^
+
+error: the source field is declared here
+ --> tests/ui/from-not-source.rs:5:5
+  |
+5 |     #[source]
+  |     ^^^^^^^^^

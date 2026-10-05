@@ -1,0 +1,23 @@
+error: transparent error struct can't contain #[backtrace]
+ --> tests/ui/transparent-backtrace.rs:5:24
+  |
+5 | pub struct StructError(#[backtrace] anyhow::Error);
+  |                        ^^^^^^^^^^^^
+
+error: #[error(transparent)] attribute is here
+ --> tests/ui/transparent-backtrace.rs:4:1
+  |
+4 | #[error(transparent)]
+  | ^^^^^^^^^^^^^^^^^^^^^
+
+error: transparent variant can't contain #[backtrace]
+  --> tests/ui/transparent-backtrace.rs:10:11
+   |
+10 |     Other(#[backtrace] anyhow::Error),
+   |           ^^^^^^^^^^^^
+
+error: #[error(transparent)] attribute is here
+ --> tests/ui/transparent-backtrace.rs:9:5
+  |
+9 |     #[error(transparent)]
+  |     ^^^^^^^^^^^^^^^^^^^^^

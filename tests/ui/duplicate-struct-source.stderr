@@ -3,3 +3,9 @@ error: duplicate #[source] attribute
   |
 7 |     #[source]
   |     ^^^^^^^^^
+
+error: first #[source] attribute is here
+ --> tests/ui/duplicate-struct-source.rs:5:5
+  |
+5 |     #[source]
+  |     ^^^^^^^^^

@@ -3,3 +3,9 @@ error: transparent error struct can't contain #[source]
   |
 5 | pub struct Error(#[source] anyhow::Error);
   |                  ^^^^^^^^^
+
+error: #[error(transparent)] attribute is here
+ --> tests/ui/transparent-struct-source.rs:4:1
+  |
+4 | #[error(transparent)]
+  | ^^^^^^^^^^^^^^^^^^^^^

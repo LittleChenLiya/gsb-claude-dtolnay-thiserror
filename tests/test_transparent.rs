@@ -127,3 +127,55 @@ fn test_non_static() {
     assert_eq!("unexpected token: \"error\"", error.to_string());
     assert!(error.source().is_none());
 }
+
+#[test]
+fn test_transparent_generic_struct_source_chain() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Diagnosing an error through its source chain must neither execute
+    // Display nor construct new errors.
+    static DISPLAY_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Debug)]
+    struct Inner {
+        source: io::Error,
+    }
+
+    impl std::fmt::Display for Inner {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            DISPLAY_CALLS.fetch_add(1, Ordering::SeqCst);
+            formatter.write_str("inner")
+        }
+    }
+
+    impl std::error::Error for Inner {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.source)
+        }
+    }
+
+    // A transparent generic wrapper compiles with the inferred `T: Error`
+    // bound on the generated Error impl and keeps the source chain of the
+    // wrapped error.
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    struct Error<T>(T);
+
+    let error = Error(Inner {
+        source: io::Error::other("oh no!"),
+    });
+
+    let mut chain = 0;
+    let mut current = error.source();
+    while let Some(source) = current {
+        chain += 1;
+        current = source.source();
+    }
+    assert_eq!(chain, 1);
+    error.source().unwrap().downcast_ref::<io::Error>().unwrap();
+    assert_eq!(DISPLAY_CALLS.load(Ordering::SeqCst), 0);
+
+    // Display is still forwarded to the inner error when actually requested.
+    assert_eq!(error.to_string(), "inner");
+    assert_eq!(DISPLAY_CALLS.load(Ordering::SeqCst), 1);
+}
