@@ -62,7 +62,15 @@ impl Display<'_> {
                         }
                     }
                     match int.parse::<u32>() {
-                        Ok(index) => MemberUnraw::Unnamed(Index { index, span }),
+                        Ok(index) => {
+                            if !extra_positional_arguments_allowed && index as usize >= fields.len()
+                            {
+                                let len = fields.len();
+                                let msg = format!("tuple index out of bounds: the len is {len} but the index is {index}");
+                                return Err(Error::new(span, msg));
+                            }
+                            MemberUnraw::Unnamed(Index { index, span })
+                        }
                         Err(_) => return Ok(()),
                     }
                 }
@@ -111,6 +119,28 @@ impl Display<'_> {
             let field = match member_index.get(&member) {
                 Some(&field) => field,
                 None => {
+                    match &member {
+                        MemberUnraw::Named(ident) if member != *"self" => {
+                            // Format args can only refer to fields of this
+                            // struct or variant, or to named arguments passed
+                            // explicitly after the format string. Anything
+                            // else is reported here, at the span of the
+                            // original format string, instead of surfacing as
+                            // a confusing "cannot find value in this scope"
+                            // error from within the generated Display impl.
+                            let msg = format!("no field named `{ident}` in this {container}");
+                            return Err(Error::new(span, msg));
+                        }
+                        MemberUnraw::Named(_) => {
+                            // `self` is in scope in the generated Display
+                            // impl and refers to the error value itself.
+                        }
+                        MemberUnraw::Unnamed(_) => {
+                            // In a container with named fields, a positional
+                            // reference binds to one of the additional
+                            // unnamed format arguments, not to a field.
+                        }
+                    }
                     out += &member.to_string();
                     continue;
                 }

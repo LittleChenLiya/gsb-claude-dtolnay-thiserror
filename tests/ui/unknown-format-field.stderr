@@ -1,0 +1,17 @@
+error: no field named `nope` in this struct
+ --> tests/ui/unknown-format-field.rs:4:9
+  |
+4 | #[error("missing field: {nope}")]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: no field named `code` in this struct variant
+  --> tests/ui/unknown-format-field.rs:13:13
+   |
+13 |     #[error("named variant: {code}")]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: no field named `nope` in this tuple variant
+  --> tests/ui/unknown-format-field.rs:19:13
+   |
+19 |     #[error("tuple variant: {nope}")]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,11 @@
+error: tuple index out of bounds: the len is 1 but the index is 1
+ --> tests/ui/tuple-index-out-of-bounds.rs:4:9
+  |
+4 | #[error("out of bounds: {1}")]
+  |         ^^^^^^^^^^^^^^^^^^^^
+
+error: tuple index out of bounds: the len is 2 but the index is 2
+ --> tests/ui/tuple-index-out-of-bounds.rs:9:13
+  |
+9 |     #[error("out of bounds: {2}")]
+  |             ^^^^^^^^^^^^^^^^^^^^

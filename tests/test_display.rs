@@ -73,8 +73,10 @@ fn test_enum() {
 
 #[test]
 fn test_constants() {
+    // Format args that are not fields of the error must be bound explicitly
+    // as named arguments; unbound identifiers are rejected by the derive.
     #[derive(Error, Debug)]
-    #[error("{MSG}: {id:?} (code {CODE:?})")]
+    #[error("{MSG}: {id:?} (code {CODE:?})", MSG = MSG, CODE = CODE)]
     struct Error {
         id: &'static str,
     }
