@@ -1,0 +1,5 @@
+error: transparent error struct can't contain #[backtrace]
+ --> tests/ui/transparent-struct-backtrace.rs:6:18
+  |
+6 | pub struct Error(#[backtrace] Backtrace);
+  |                  ^^^^^^^^^^^^

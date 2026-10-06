@@ -1,0 +1,11 @@
+error: duplicate #[source] attribute
+  --> tests/ui/duplicate-enum-source-later-variant.rs:11:9
+   |
+11 |         #[source]
+   |         ^^^^^^^^^
+
+error: first #[source] attribute is here
+ --> tests/ui/duplicate-enum-source-later-variant.rs:9:9
+  |
+9 |         #[source]
+  |         ^^^^^^^^^

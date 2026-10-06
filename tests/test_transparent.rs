@@ -127,3 +127,77 @@ fn test_non_static() {
     assert_eq!("unexpected token: \"error\"", error.to_string());
     assert!(error.source().is_none());
 }
+
+#[test]
+fn test_transparent_generic_source_chain() {
+    // A transparent wrapper around a generic field must compile with the
+    // inferred `E: Error` bound on the generated Error impl, and must keep
+    // the inner error's whole source chain.
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    struct Transparent<E>(E);
+
+    #[derive(Error, Debug)]
+    #[error("middle")]
+    struct Middle(#[source] io::Error);
+
+    let io = io::Error::other("oh no!");
+    let error = Transparent(Middle(io));
+
+    // Transparent: Display delegates to the inner error, and source()
+    // delegates to the inner error's own source, so the inner error's
+    // source chain is preserved through the generic wrapper.
+    assert_eq!("middle", error.to_string());
+    let source = error.source().unwrap();
+    assert_eq!("oh no!", source.to_string());
+    assert!(source.source().is_none());
+}
+
+#[test]
+fn test_transparent_source_chain_does_not_execute_display() {
+    // Diagnosing an error through its source chain must not execute Display
+    // of the transparently wrapped error, nor construct new error values.
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static DISPLAY_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    struct Transparent<E>(E);
+
+    struct Counted {
+        source: io::Error,
+    }
+
+    impl std::fmt::Debug for Counted {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.debug_struct("Counted").finish()
+        }
+    }
+
+    impl std::fmt::Display for Counted {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            DISPLAY_CALLS.fetch_add(1, Ordering::SeqCst);
+            formatter.write_str("counted")
+        }
+    }
+
+    impl std::error::Error for Counted {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.source)
+        }
+    }
+
+    let error = Transparent(Counted {
+        source: io::Error::other("oh no!"),
+    });
+
+    // The source chain of the wrapped error is kept: source() of the
+    // transparent wrapper is the wrapped error's own source.
+    let source = error.source().unwrap();
+    assert!(source.downcast_ref::<io::Error>().is_some());
+    assert!(source.source().is_none());
+
+    // Walking the source chain never executed Display of the wrapped error.
+    assert_eq!(0, DISPLAY_CALLS.load(Ordering::SeqCst));
+}

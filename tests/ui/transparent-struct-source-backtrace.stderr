@@ -1,0 +1,11 @@
+error: transparent error struct can't contain #[source]
+ --> tests/ui/transparent-struct-source-backtrace.rs:5:18
+  |
+5 | pub struct Error(#[source] #[backtrace] anyhow::Error);
+  |                  ^^^^^^^^^
+
+error: transparent error struct can't contain #[backtrace]
+ --> tests/ui/transparent-struct-source-backtrace.rs:5:28
+  |
+5 | pub struct Error(#[source] #[backtrace] anyhow::Error);
+  |                            ^^^^^^^^^^^^

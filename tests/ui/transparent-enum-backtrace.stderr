@@ -1,0 +1,5 @@
+error: transparent variant can't contain #[backtrace]
+ --> tests/ui/transparent-enum-backtrace.rs:7:11
+  |
+7 |     Other(#[backtrace] Backtrace),
+  |           ^^^^^^^^^^^^

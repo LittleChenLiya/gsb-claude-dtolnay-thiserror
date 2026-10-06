@@ -3,3 +3,9 @@ error: duplicate #[source] attribute
   |
 8 |         #[source]
   |         ^^^^^^^^^
+
+error: first #[source] attribute is here
+ --> tests/ui/duplicate-enum-source.rs:6:9
+  |
+6 |         #[source]
+  |         ^^^^^^^^^
