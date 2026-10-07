@@ -46,20 +46,40 @@ impl Enum<'_> {
     fn validate(&self) -> Result<()> {
         check_non_field_attrs(&self.attrs)?;
         let has_display = self.has_display();
+        // Validate each variant independently so that invalid attributes on
+        // one variant do not mask the diagnostics belonging to the other
+        // variants. The per-variant errors are merged in source order into a
+        // single error for the derive to report.
+        let mut errors: Option<Error> = None;
         for variant in &self.variants {
-            variant.validate()?;
-            if has_display
-                && variant.attrs.display.is_none()
-                && variant.attrs.transparent.is_none()
-                && variant.attrs.fmt.is_none()
-            {
-                return Err(Error::new_spanned(
-                    variant.original,
-                    "missing #[error(\"...\")] display attribute",
-                ));
+            // A variant that is already malformed is not additionally
+            // diagnosed for a missing display attribute, as both complaints
+            // would stem from the same broken variant.
+            let result = variant.validate().and_then(|()| {
+                if has_display
+                    && variant.attrs.display.is_none()
+                    && variant.attrs.transparent.is_none()
+                    && variant.attrs.fmt.is_none()
+                {
+                    Err(Error::new_spanned(
+                        variant.original,
+                        "missing #[error(\"...\")] display attribute",
+                    ))
+                } else {
+                    Ok(())
+                }
+            });
+            if let Err(error) = result {
+                match &mut errors {
+                    Some(errors) => errors.combine(error),
+                    None => errors = Some(error),
+                }
             }
         }
-        Ok(())
+        match errors {
+            Some(errors) => Err(errors),
+            None => Ok(()),
+        }
     }
 }
 
@@ -244,5 +264,114 @@ fn contains_non_static_lifetime(ty: &Type) -> bool {
             .as_ref()
             .is_some_and(|lifetime| lifetime.ident != "static"),
         _ => false, // maybe implement later if there are common other cases
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::expand::{derive, try_expand};
+    use syn::DeriveInput;
+
+    fn parse(input: &str) -> DeriveInput {
+        syn::parse_str(input).unwrap()
+    }
+
+    fn try_expand_errors(input: &str) -> Vec<String> {
+        match try_expand(&parse(input)) {
+            Ok(expanded) => panic!("expected expansion to fail, got: {}", expanded),
+            Err(error) => error.into_iter().map(|error| error.to_string()).collect(),
+        }
+    }
+
+    // Fixture with two variants that each carry an invalid attribute of
+    // their own: both diagnostics are reported, merged in source order.
+    const TWO_INVALID_VARIANTS: &str = "\
+        enum Error {
+            #[error(transparent)]
+            First(u8, u8),
+            #[error(\"second\")]
+            Second { #[from] a: u8, #[from] b: u8 },
+        }
+    ";
+
+    #[test]
+    fn independent_variant_errors_merge_in_source_order() {
+        let errors = try_expand_errors(TWO_INVALID_VARIANTS);
+        assert_eq!(
+            errors,
+            [
+                "#[error(transparent)] requires exactly one field",
+                "duplicate #[from] attribute",
+            ],
+        );
+    }
+
+    #[test]
+    fn merged_errors_emit_single_fallback_impl() {
+        let expanded = derive(&parse(TWO_INVALID_VARIANTS)).to_string();
+        // Both diagnostics are emitted, in source order...
+        let first = expanded
+            .find("#[error(transparent)] requires exactly one field")
+            .unwrap();
+        let second = expanded.find("duplicate #[from] attribute").unwrap();
+        assert!(first < second);
+        // ...as exactly two compile_errors, with a single fallback Error
+        // impl and Display impl rather than one derivation per error.
+        assert_eq!(expanded.matches("compile_error !").count(), 2);
+        assert_eq!(expanded.matches("fn fmt").count(), 1);
+        assert!(!expanded.contains("fn source"));
+        assert!(!expanded.contains("convert :: From"));
+    }
+
+    #[test]
+    fn variant_error_does_not_derive_duplicate_diagnostics() {
+        // The malformed second variant is not additionally diagnosed for a
+        // missing display attribute: one root cause, one error.
+        let errors = try_expand_errors("\
+            enum Error {
+                #[error(\"first\")]
+                First,
+                Second { #[from] a: u8, #[from] b: u8 },
+            }
+        ");
+        assert_eq!(errors, ["duplicate #[from] attribute"]);
+    }
+
+    #[test]
+    fn syntax_error_stops_without_guessing_remaining_structure() {
+        // The attribute on First fails to parse; expansion stops there
+        // instead of speculating about the rest of the enum, so the invalid
+        // transparent attribute on Second is never diagnosed.
+        let errors = try_expand_errors("\
+            enum Error {
+                #[error(=)]
+                First,
+                #[error(transparent)]
+                Second(u8, u8),
+            }
+        ");
+        assert_eq!(errors.len(), 1);
+        assert_ne!(
+            errors[0],
+            "#[error(transparent)] requires exactly one field",
+        );
+    }
+
+    #[test]
+    fn legal_enum_expansion_still_contains_display_source_from() {
+        let input = parse("\
+            enum Error {
+                #[error(\"first {0}\")]
+                First(u8),
+                #[error(transparent)]
+                Second(Inner),
+                #[error(\"third\")]
+                Third(#[from] Inner),
+            }
+        ");
+        let expanded = try_expand(&input).unwrap().to_string();
+        assert!(expanded.contains(":: core :: fmt :: Display"));
+        assert!(expanded.contains("fn source"));
+        assert!(expanded.contains(":: core :: convert :: From"));
     }
 }

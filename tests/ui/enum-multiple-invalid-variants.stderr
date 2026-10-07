@@ -1,0 +1,12 @@
+error: #[error(transparent)] requires exactly one field
+ --> tests/ui/enum-multiple-invalid-variants.rs:5:5
+  |
+5 | /     #[error(transparent)]
+6 | |     First(std::io::Error, std::io::Error),
+  | |_________________________________________^
+
+error: duplicate #[from] attribute
+  --> tests/ui/enum-multiple-invalid-variants.rs:12:9
+   |
+12 |         #[from]
+   |         ^^^^^^^

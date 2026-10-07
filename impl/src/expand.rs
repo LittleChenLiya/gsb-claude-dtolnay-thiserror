@@ -19,7 +19,7 @@ pub fn derive(input: &DeriveInput) -> TokenStream {
     }
 }
 
-fn try_expand(input: &DeriveInput) -> Result<TokenStream> {
+pub(crate) fn try_expand(input: &DeriveInput) -> Result<TokenStream> {
     let input = Input::from_syn(input)?;
     input.validate()?;
     Ok(match input {

@@ -1,0 +1,5 @@
+error: expected one of: string literal, `transparent`, `fmt`
+ --> tests/ui/enum-variant-syntax-error.rs:5:13
+  |
+5 |     #[error(=)]
+  |             ^
