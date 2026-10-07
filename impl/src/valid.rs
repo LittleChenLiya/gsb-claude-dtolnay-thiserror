@@ -1,5 +1,7 @@
 use crate::ast::{Enum, Field, Input, Struct, Variant};
 use crate::attr::Attrs;
+use proc_macro2::TokenStream;
+use quote::ToTokens;
 use syn::{Error, GenericArgument, PathArguments, Result, Type};
 
 impl Input<'_> {
@@ -59,6 +61,7 @@ impl Enum<'_> {
                 ));
             }
         }
+        check_duplicate_from_types(&self.variants)?;
         Ok(())
     }
 }
@@ -245,4 +248,48 @@ fn contains_non_static_lifetime(ty: &Type) -> bool {
             .is_some_and(|lifetime| lifetime.ident != "static"),
         _ => false, // maybe implement later if there are common other cases
     }
+}
+
+// Two variants that both carry `#[from]` for the same source type would expand
+// to two identical `impl From<T> for Error`, which is an E0119 coherence error
+// whose span only points at one of the two variants. Detect the directly
+// same-syntax case while still inside the derive so that both variants can be
+// named in the diagnostic. Type aliases are deliberately not resolved here:
+// equality is judged structurally on the tokenized syntax, not by comparing
+// path text, so `type IoError = std::io::Error;` slips through and is left to
+// the compiler's real coherence check.
+fn check_duplicate_from_types(variants: &[Variant]) -> Result<()> {
+    let mut seen: Vec<(&Variant, TokenStream)> = Vec::new();
+    for variant in variants {
+        let Some(from_field) = variant.from_field() else {
+            continue;
+        };
+        // `#[from] Option<T>` generates `impl From<T>` (the Option is wrapped
+        // in the constructor), so the comparison is done on the unwrapped type.
+        let from_ty =
+            crate::expand::type_parameter_of_option(from_field.ty).unwrap_or(from_field.ty);
+        let from_tokens = from_ty.to_token_stream();
+        if let Some((first_variant, _)) = seen
+            .iter()
+            .find(|(_, existing_tokens)| existing_tokens.to_string() == from_tokens.to_string())
+        {
+            // TokenStream's Display renders `::` with surrounding spaces; tidy
+            // those up purely for the human-readable message.
+            let ty_display = from_tokens.to_string().replace(" :: ", "::");
+            let mut error = Error::new_spanned(
+                from_field.original,
+                format!(
+                    "both `{}` and `{}` #[from] fields convert from `{}`, which would create duplicate `From<{}>` implementations",
+                    first_variant.ident, variant.ident, ty_display, ty_display,
+                ),
+            );
+            error.combine(Error::new_spanned(
+                first_variant.from_field().unwrap().original,
+                "first #[from] field with this source type",
+            ));
+            return Err(error);
+        }
+        seen.push((variant, from_tokens));
+    }
+    Ok(())
 }
