@@ -573,7 +573,7 @@ fn unoptional_type(ty: &Type) -> TokenStream {
     quote!(#unoptional)
 }
 
-fn type_parameter_of_option(ty: &Type) -> Option<&Type> {
+pub(crate) fn type_parameter_of_option(ty: &Type) -> Option<&Type> {
     let path = match ty {
         Type::Path(ty) => &ty.path,
         _ => return None,

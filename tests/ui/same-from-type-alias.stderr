@@ -1,0 +1,8 @@
+error[E0119]: conflicting implementations of trait `From<std::io::Error>` for type `Error`
+  --> tests/ui/same-from-type-alias.rs:10:15
+   |
+ 8 |     OpenFile(#[from] std::io::Error),
+   |              ------- first implementation here
+ 9 |     #[error("failed to close")]
+10 |     CloseFile(#[from] Io),
+   |               ^^^^^^^ conflicting implementation for `Error`

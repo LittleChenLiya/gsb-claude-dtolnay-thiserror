@@ -1,5 +1,7 @@
 use crate::ast::{Enum, Field, Input, Struct, Variant};
 use crate::attr::Attrs;
+use crate::expand::type_parameter_of_option;
+use quote::ToTokens;
 use syn::{Error, GenericArgument, PathArguments, Result, Type};
 
 impl Input<'_> {
@@ -59,8 +61,48 @@ impl Enum<'_> {
                 ));
             }
         }
+        check_duplicate_from_types(&self.variants)?;
         Ok(())
     }
+}
+
+// Two variants annotated with `#[from]` on fields written as the same syntax
+// type would each expand to an identical `impl From<T> for Self`, which the
+// compiler rejects as a conflicting implementation. Detect that case at the
+// source so the diagnostic can point at both variants.
+//
+// Equality is decided purely on the surface syntax of the written type. A
+// type alias (`type Io = std::io::Error`) is intentionally *not* considered
+// equal to the aliased type: only the compiler can know whether two distinct
+// names refer to the same type, so such cases are left for it to diagnose.
+// The outer `Option`, if present, is stripped because `#[from] Option<T>` and
+// `#[from] T` both generate `impl From<T>`.
+fn check_duplicate_from_types(variants: &[Variant]) -> Result<()> {
+    let mut from_types: Vec<(String, &Field)> = Vec::new();
+    for variant in variants {
+        if let Some(from_field) = variant.from_field() {
+            let from_ty = type_parameter_of_option(from_field.ty)
+                .unwrap_or(from_field.ty)
+                .to_token_stream()
+                .to_string();
+            if let Some((_, prior_field)) = from_types.iter().find(|(ty, _)| *ty == from_ty) {
+                let prior_attr = prior_field.attrs.from.unwrap().original;
+                let current_attr = from_field.attrs.from.unwrap().original;
+                let mut error = Error::new_spanned(
+                    current_attr,
+                    "cannot have #[from] on two fields of the same type; \
+                     From can only be implemented once per type",
+                );
+                error.combine(Error::new_spanned(
+                    prior_attr,
+                    "other #[from] field of the same type",
+                ));
+                return Err(error);
+            }
+            from_types.push((from_ty, from_field));
+        }
+    }
+    Ok(())
 }
 
 impl Variant<'_> {
